@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dream Space Designer ✨</title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',Arial,sans-serif; background:#1a1a2e; overflow:hidden; height:100vh; display:flex; flex-direction:column; user-select:none; }
+
+#topbar {
+  background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+  padding: 7px 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  box-shadow: 0 3px 16px rgba(0,0,0,0.4);
+  z-index: 10;
+  flex-wrap: wrap;
+}
+#topbar h1 { color:white; font-size:17px; font-weight:900; letter-spacing:-0.5px; margin-right:2px; text-shadow:0 2px 4px rgba(0,0,0,0.3); white-space:nowrap; }
+.scene-btn {
+  background:rgba(255,255,255,0.15); border:2px solid rgba(255,255,255,0.3);
+  color:white; padding:4px 10px; border-radius:20px; cursor:pointer;
+  font-size:12px; font-weight:700; transition:all 0.18s; white-space:nowrap;
+}
+.scene-btn:hover,.scene-btn.active { background:white; color:#6c5ce7; border-color:white; }
+#right-controls { margin-left:auto; display:flex; align-items:center; gap:7px; }
+.icon-btn {
+  background:rgba(255,255,255,0.15); border:2px solid rgba(255,255,255,0.3);
+  color:white; width:33px; height:33px; border-radius:50%; cursor:pointer;
+  font-size:14px; display:flex; align-items:center; justify-content:center;
+  transition:all 0.18s;
+}
+.icon-btn:hover { background:white; color:#6c5ce7; }
+#coins-display {
+  background:linear-gradient(135deg,#f9ca24,#f0932b); color:white;
+  padding:5px 13px; border-radius:20px; font-weight:900; font-size:15px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3); white-space:nowrap;
+}
+
+#main-area { display:flex; flex:1; overflow:hidden; }
+
+#item-panel {
+  width:150px; background:linear-gradient(180deg,#2d1b69,#1a1a2e);
+  overflow-y:auto; flex-shrink:0; padding:6px;
+}
+#item-panel::-webkit-scrollbar { width:4px; }
+#item-panel::-webkit-scrollbar-thumb { background:#6c5ce7; border-radius:4px; }
+.cat-label {
+  color:#a29bfe; font-size:10px; font-weight:800; text-transform:uppercase;
+  letter-spacing:0.8px; padding:6px 4px 3px;
+  border-top:1px solid rgba(162,155,254,0.2); margin-top:4px;
+}
+.cat-label:first-child { border-top:none; margin-top:0; }
+.item-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.item-card {
+  background:rgba(255,255,255,0.07); border:2px solid transparent;
+  border-radius:10px; padding:6px 4px; cursor:pointer; text-align:center;
+  transition:all 0.16s;
+}
+.item-card:hover { background:rgba(108,92,231,0.35); border-color:#6c5ce7; transform:scale(1.06); }
+.item-card.selected { background:rgba(108,92,231,0.55); border-color:#fff; transform:scale(1.06); }
+.item-icon { font-size:24px; line-height:1; display:block; }
+.item-name { color:rgba(255,255,255,0.9); font-size:9px; font-weight:700; margin-top:2px; display:block; }
+.item-val { color:#f9ca24; font-size:9px; font-weight:800; }
+
+#canvas-container { flex:1; position:relative; overflow:hidden; }
+canvas { display:block; }
+
+#hint {
+  position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+  background:rgba(0,0,0,0.65); color:white; padding:6px 18px;
+  border-radius:20px; font-size:12px; pointer-events:none;
+  white-space:nowrap; backdrop-filter:blur(4px);
+}
+.coin-anim {
+  position:absolute; color:#f9ca24; font-size:26px; font-weight:900;
+  pointer-events:none; text-shadow:0 2px 8px rgba(0,0,0,0.6);
+  animation: floatUp 1.1s ease-out forwards;
+  z-index: 20;
+}
+@keyframes floatUp {
+  0%   { opacity:1; transform:translateY(0) scale(1); }
+  100% { opacity:0; transform:translateY(-70px) scale(1.3); }
+}
+#stats-panel {
+  position:absolute; top:12px; right:12px;
+  background:rgba(0,0,0,0.5); color:white;
+  padding:8px 12px; border-radius:12px; font-size:12px;
+  backdrop-filter:blur(4px); line-height:1.7;
+}
+#stats-panel b { color:#a29bfe; }
+#controls-hint {
+  position:absolute; top:12px; left:12px;
+  background:rgba(0,0,0,0.45); color:rgba(255,255,255,0.75);
+  padding:6px 10px; border-radius:10px; font-size:10px;
+  backdrop-filter:blur(4px); line-height:1.7; pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>✨ Dream Space</h1>
+  <button class="scene-btn active" onclick="switchScene('bedroom',this)">🛏️ Bedroom</button>
+  <button class="scene-btn" onclick="switchScene('garden',this)">🌸 Garden</button>
+  <button class="scene-btn" onclick="switchScene('space',this)">🚀 Space</button>
+  <button class="scene-btn" onclick="switchScene('ocean',this)">🌊 Ocean</button>
+  <button class="scene-btn" onclick="switchScene('candy',this)">🍭 Candy</button>
+  <button class="scene-btn" onclick="switchScene('treehouse',this)">🌳 Treehouse</button>
+  <div id="right-controls">
+    <button class="icon-btn" onclick="toggleMusic()" id="musicBtn" title="Toggle Music">🎵</button>
+    <button class="icon-btn" onclick="clearAll()" title="Clear All">🗑️</button>
+    <div id="coins-display">🪙 <span id="coinCount">0</span></div>
+  </div>
+</div>
+
+<div id="main-area">
+  <div id="item-panel"></div>
+  <div id="canvas-container">
+    <canvas id="threeCanvas"></canvas>
+    <div id="hint">👆 Pick an item from the left panel, then click to place it!</div>
+    <div id="stats-panel">
+      <div><b>Items placed:</b> <span id="itemCountDisplay">0</span></div>
+      <div><b>Total score:</b> <span id="scoreDisplay">0</span></div>
+    </div>
+    <div id="controls-hint">
+      🖱️ Right-drag: rotate<br>
+      🖱️ Scroll: zoom<br>
+      ⎋ Esc: cancel placing
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CATALOG ──────────────────────────────────────────────────────────────────
+const CATALOG = [
+  { cat:'🛋️ Furniture', id:'bed',       name:'Bed',       icon:'🛏️', coins:15 },
+  { cat:'🛋️ Furniture', id:'sofa',      name:'Sofa',      icon:'🛋️', coins:12 },
+  { cat:'🛋️ Furniture', id:'chair',     name:'Chair',     icon:'🪑', coins:8  },
+  { cat:'🛋️ Furniture', id:'table',     name:'Table',     icon:'🪵', coins:10 },
+  { cat:'🛋️ Furniture', id:'bookshelf', name:'Bookshelf', icon:'📚', coins:12 },
+  { cat:'🛋️ Furniture', id:'desk',      name:'Desk',      icon:'🖥️', coins:14 },
+  { cat:'🛋️ Furniture', id:'wardrobe',  name:'Wardrobe',  icon:'🗄️', coins:16 },
+  { cat:'🛋️ Furniture', id:'bathtub',   name:'Bathtub',   icon:'🛁', coins:18 },
+
+  { cat:'✨ Decor',     id:'lamp',      name:'Lamp',      icon:'💡', coins:8  },
+  { cat:'✨ Decor',     id:'mirror',    name:'Mirror',    icon:'🪞', coins:10 },
+  { cat:'✨ Decor',     id:'plant',     name:'Plant',     icon:'🪴', coins:7  },
+  { cat:'✨ Decor',     id:'rug',       name:'Rug',       icon:'🟥', coins:6  },
+  { cat:'✨ Decor',     id:'clock',     name:'Clock',     icon:'🕐', coins:8  },
+  { cat:'✨ Decor',     id:'painting',  name:'Painting',  icon:'🖼️', coins:10 },
+
+  { cat:'🌿 Nature',   id:'tree',      name:'Big Tree',  icon:'🌳', coins:12 },
+  { cat:'🌿 Nature',   id:'flower',    name:'Flower',    icon:'🌸', coins:6  },
+  { cat:'🌿 Nature',   id:'cactus',    name:'Cactus',    icon:'🌵', coins:8  },
+  { cat:'🌿 Nature',   id:'mushroom',  name:'Mushroom',  icon:'🍄', coins:7  },
+  { cat:'🌿 Nature',   id:'rock',      name:'Rock',      icon:'🪨', coins:4  },
+  { cat:'🌿 Nature',   id:'fountain',  name:'Fountain',  icon:'⛲', coins:20 },
+
+  { cat:'🌟 Fantasy',  id:'rainbow',   name:'Rainbow',   icon:'🌈', coins:15 },
+  { cat:'🌟 Fantasy',  id:'cloud',     name:'Cloud',     icon:'☁️', coins:10 },
+  { cat:'🌟 Fantasy',  id:'planet',    name:'Planet',    icon:'🪐', coins:18 },
+  { cat:'🌟 Fantasy',  id:'rocket',    name:'Rocket',    icon:'🚀', coins:16 },
+  { cat:'🌟 Fantasy',  id:'crystal',   name:'Crystal',   icon:'💎', coins:14 },
+
+  { cat:'🎉 Fun',      id:'balloon',   name:'Balloon',   icon:'🎈', coins:6  },
+  { cat:'🎉 Fun',      id:'tent',      name:'Tent',      icon:'⛺', coins:12 },
+  { cat:'🎉 Fun',      id:'castle',    name:'Castle',    icon:'🏰', coins:25 },
+  { cat:'🎉 Fun',      id:'chest',     name:'Treasure',  icon:'📦', coins:20 },
+  { cat:'🎉 Fun',      id:'slide',     name:'Slide',     icon:'🎢', coins:14 },
+];
+
+// ── SCENE CONFIGS ─────────────────────────────────────────────────────────────
+const SCENES = {
+  bedroom:   { sky:0xffe4e1, fog:0xffe4e1, floor:0xc8956c, wallColor:0xffcdd2, ambient:0xffffff, sun:0xffe4b5 },
+  garden:    { sky:0x87ceeb, fog:0xb0e0ff, floor:0x4caf50, wallColor:0xb0e0ff, ambient:0xffffff, sun:0xfff9c4 },
+  space:     { sky:0x050520, fog:0x050520, floor:0x1a1a3e, wallColor:0x0d0d3a, ambient:0x4040aa, sun:0xaabbff },
+  ocean:     { sky:0x006994, fog:0x0088bb, floor:0xf4d03f, wallColor:0x005577, ambient:0x80ddff, sun:0xaaeeff },
+  candy:     { sky:0xffb6c1, fog:0xffccd5, floor:0xff85c1, wallColor:0xffaad4, ambient:0xffffff, sun:0xffff99 },
+  treehouse: { sky:0x98d98e, fog:0xb8e8b0, floor:0x8b4513, wallColor:0xa0522d, ambient:0xffffff, sun:0xffff99 },
+};
+
+// ── MESH HELPERS ──────────────────────────────────────────────────────────────
+const LM = c => new THREE.MeshLambertMaterial({ color: c });
+const PM = (c, opts) => new THREE.MeshPhongMaterial({ color: c, ...opts });
+const BM = c => new THREE.MeshBasicMaterial({ color: c });
+
+function mkBox(w,h,d,c)   { return new THREE.Mesh(new THREE.BoxGeometry(w,h,d), LM(c)); }
+function mkCyl(rt,rb,h,s,c){ return new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s), LM(c)); }
+function mkSph(r,c,s=14)   { return new THREE.Mesh(new THREE.SphereGeometry(r,s,s), LM(c)); }
+function mkCon(r,h,s,c)    { return new THREE.Mesh(new THREE.ConeGeometry(r,h,s), LM(c)); }
+function mkTor(R,r,s,t,c)  { return new THREE.Mesh(new THREE.TorusGeometry(R,r,s,t), LM(c)); }
+
+function shadow(g) {
+  g.traverse(m => { if(m.isMesh){ m.castShadow=true; m.receiveShadow=true; } });
+  return g;
+}
+
+// ── ITEM FACTORY ──────────────────────────────────────────────────────────────
+function createItem(id) {
+  const g = new THREE.Group();
+  g.userData.itemId = id;
+
+  switch(id) {
+    case 'bed': {
+      [[-0.85,0,-1.4],[0.85,0,-1.4],[-0.85,0,1.4],[0.85,0,1.4]].forEach(([x,y,z])=>{
+        const leg = mkBox(0.14,0.38,0.14, 0xb8622e); leg.position.set(x,0.19,z); g.add(leg);
+      });
+      const mat = mkBox(1.9,0.38,3.0, 0xff9eb5); mat.position.y=0.38; g.add(mat);
+      const hb  = mkBox(1.9,0.9,0.14, 0xd4773a); hb.position.set(0,0.83,-1.45); g.add(hb);
+      const pillow = mkBox(0.75,0.14,0.55, 0xffffff); pillow.position.set(0,0.6,-1.05); g.add(pillow);
+      const blanket= mkBox(1.8,0.12,1.7,  0x7ec8e3); blanket.position.set(0,0.6,0.25); g.add(blanket);
+      break;
+    }
+    case 'sofa': {
+      const base = mkBox(2.7,0.2,1.1, 0x6c3483); base.position.y=0.1; g.add(base);
+      const seat = mkBox(2.7,0.42,1.1, 0x9b59b6); seat.position.y=0.4; g.add(seat);
+      const back = mkBox(2.7,0.7,0.18, 0x8e44ad); back.position.set(0,0.94,-0.46); g.add(back);
+      const a1   = mkBox(0.2,0.6,1.1, 0x8e44ad); a1.position.set(-1.25,0.6,0); g.add(a1);
+      const a2   = a1.clone(); a2.position.x=1.25; g.add(a2);
+      const c1   = mkBox(1.05,0.16,0.88, 0xd7bde2); c1.position.set(-0.62,0.63,0.08); g.add(c1);
+      const c2   = c1.clone(); c2.position.x=0.62; g.add(c2);
+      break;
+    }
+    case 'chair': {
+      [[-0.38,0,-0.38],[0.38,0,-0.38],[-0.38,0,0.38],[0.38,0,0.38]].forEach(([x,y,z])=>{
+        const leg = mkBox(0.09,0.54,0.09, 0xc0392b); leg.position.set(x,0.27,z); g.add(leg);
+      });
+      const seat = mkBox(0.95,0.1,0.95, 0xe67e22); seat.position.y=0.55; g.add(seat);
+      const back = mkBox(0.95,0.85,0.1, 0xd35400); back.position.set(0,1.0,-0.43); g.add(back);
+      break;
+    }
+    case 'table': {
+      [[-1.05,0,-0.52],[1.05,0,-0.52],[-1.05,0,0.52],[1.05,0,0.52]].forEach(([x,y,z])=>{
+        const leg = mkBox(0.11,0.88,0.11, 0xb8883a); leg.position.set(x,0.44,z); g.add(leg);
+      });
+      const top = mkBox(2.4,0.11,1.3, 0xd4a574); top.position.y=0.9; g.add(top);
+      break;
+    }
+    case 'bookshelf': {
+      const frame = mkBox(1.55,2.35,0.38, 0x8b4513); frame.position.y=1.17; g.add(frame);
+      const bookColors=[0xe74c3c,0x3498db,0x2ecc71,0xf1c40f,0x9b59b6,0xe67e22];
+      for(let row=0;row<3;row++){
+        const shelf = mkBox(1.44,0.05,0.36,0xa0522d); shelf.position.set(0,row*0.73+0.3,0); g.add(shelf);
+        let bx=-0.6;
+        for(let i=0;i<5;i++){
+          const bk = mkBox(0.14+Math.random()*0.07, 0.46+Math.random()*0.18, 0.28, bookColors[(row*5+i)%6]);
+          bk.position.set(bx+0.1, row*0.73+0.55, 0); bx+=0.21; g.add(bk);
+        }
+      }
+      break;
+    }
+    case 'desk': {
+      [[-0.82,0,0],[0.82,0,0]].forEach(([x,y,z])=>{
+        const p = mkBox(0.09,0.84,0.95,0xc8a96e); p.position.set(x,0.42,z); g.add(p);
+      });
+      const surface = mkBox(1.9,0.09,0.95, 0xdeb887); surface.position.y=0.85; g.add(surface);
+      const mon  = mkBox(0.88,0.58,0.07, 0x2c3e50); mon.position.set(-0.28,1.24,-0.1); g.add(mon);
+      const scr  = mkBox(0.78,0.48,0.01, 0x3498db); scr.position.set(-0.28,1.24,-0.04); g.add(scr);
+      const std  = mkBox(0.09,0.19,0.14, 0x555555); std.position.set(-0.28,0.95,-0.1); g.add(std);
+      const kb   = mkBox(0.7,0.04,0.3, 0xdddddd); kb.position.set(0.3,0.9,0.1); g.add(kb);
+      break;
+    }
+    case 'wardrobe': {
+      const body = mkBox(1.95,2.35,0.68, 0xcd853f); body.position.y=1.17; g.add(body);
+      const d1   = mkBox(0.9,2.22,0.05, 0xdaa520); d1.position.set(-0.48,1.17,0.36); g.add(d1);
+      const d2   = d1.clone(); d2.position.x=0.48; g.add(d2);
+      const k1   = mkSph(0.055, 0xffd700); k1.position.set(-0.04,1.17,0.4); g.add(k1);
+      const k2   = k1.clone(); k2.position.x=0.92; g.add(k2);
+      const crown= mkBox(2.05,0.14,0.73, 0xa0522d); crown.position.y=2.43; g.add(crown);
+      break;
+    }
+    case 'bathtub': {
+      const outer = mkBox(2.1,0.78,1.15, 0xf0f0f0); outer.position.y=0.39; g.add(outer);
+      const inner = mkBox(1.82,0.48,0.88, 0xe8e8ff); inner.position.y=0.68; g.add(inner);
+      const water = mkBox(1.78,0.09,0.84, 0x7ec8e3); water.position.y=0.73; g.add(water);
+      const fau   = mkBox(0.07,0.38,0.07, 0xc0c0c0); fau.position.set(-0.77,1.08,-0.28); g.add(fau);
+      const spout = mkBox(0.07,0.07,0.23, 0xc0c0c0); spout.position.set(-0.77,1.25,-0.18); g.add(spout);
+      break;
+    }
+    case 'lamp': {
+      const base = mkCyl(0.24,0.28,0.11,8,0x888888); base.position.y=0.055; g.add(base);
+      const pole = mkCyl(0.04,0.04,1.55,8,0x999999); pole.position.y=0.85; g.add(pole);
+      const shade= mkCon(0.38,0.58,8,0xffeb99); shade.position.y=1.86; g.add(shade);
+      const bulb = mkSph(0.11, 0xfffff0); bulb.position.y=1.64; g.add(bulb);
+      const glow = new THREE.PointLight(0xffe4a0, 0.9, 3.5);
+      glow.position.y=1.68; g.add(glow);
+      break;
+    }
+    case 'mirror': {
+      const frame = mkBox(1.08,1.75,0.09, 0xd4af37); frame.position.y=0.98; g.add(frame);
+      const glass = mkBox(0.88,1.52,0.05, 0xd4f1f9); glass.position.y=0.98; g.add(glass);
+      const top   = mkBox(1.08,0.17,0.11, 0xffd700); top.position.set(0,1.84,0); g.add(top);
+      break;
+    }
+    case 'plant': {
+      const pot  = mkCyl(0.24,0.29,0.38,8,0xe67e22); pot.position.y=0.19; g.add(pot);
+      const soil = mkCyl(0.21,0.21,0.05,8,0x5d4037); soil.position.y=0.41; g.add(soil);
+      const stem = mkCyl(0.04,0.04,0.65,6,0x27ae60); stem.position.y=0.79; g.add(stem);
+      const l1   = mkSph(0.44,0x2ecc71); l1.position.y=1.32; g.add(l1);
+      const l2   = mkSph(0.28,0x27ae60); l2.position.set(0.28,1.18,0.1); g.add(l2);
+      const l3   = l2.clone(); l3.position.set(-0.24,1.14,-0.1); g.add(l3);
+      break;
+    }
+    case 'rug': {
+      const b = mkBox(2.45,0.045,1.75, 0xe74c3c); b.position.y=0.022; g.add(b);
+      const p = mkBox(2.15,0.05,1.45,  0xf1948a); p.position.y=0.023; g.add(p);
+      const c = mkBox(1.5,0.055,0.85,  0xc0392b); c.position.y=0.024; g.add(c);
+      break;
+    }
+    case 'clock': {
+      const face  = mkCyl(0.44,0.44,0.07,32,0xfffff0); face.rotation.x=Math.PI/2; face.position.y=0.9; g.add(face);
+      const frame = mkTor(0.44,0.055,8,32,0xd4af37); frame.rotation.x=Math.PI/2; frame.position.y=0.9; g.add(frame);
+      const hH    = mkBox(0.055,0.26,0.04,0x2c3e50); hH.position.set(0.07,1.08,0.05); g.add(hH);
+      const mH    = mkBox(0.038,0.36,0.04,0x555555); mH.position.set(0,1.14,0.05); g.add(mH);
+      const pole  = mkCyl(0.04,0.04,0.88,8,0x888888); pole.position.y=0.44; g.add(pole);
+      const base  = mkBox(0.28,0.05,0.18, 0x888888); base.position.y=0.025; g.add(base);
+      break;
+    }
+    case 'painting': {
+      const frame = mkBox(1.38,1.08,0.11, 0xd4af37); frame.position.y=0.98; g.add(frame);
+      const canvas= mkBox(1.18,0.88,0.065,0xfffde7); canvas.position.y=0.98; g.add(canvas);
+      [[-0.38,0.074,0xff6b6b],[0,0.074,0x4ecdc4],[0.38,0.074,0xffe66d]].forEach(([x,z,c])=>{
+        const s = mkBox(0.33,0.83,0.075,c); s.position.set(x,0.98,z); g.add(s);
+      });
+      break;
+    }
+    case 'tree': {
+      const trunk= mkCyl(0.19,0.28,1.15,8,0x8b4513); trunk.position.y=0.57; g.add(trunk);
+      const c1   = mkCon(1.18,1.75,8,0x27ae60); c1.position.y=2.05; g.add(c1);
+      const c2   = mkCon(1.0,1.48,8,0x2ecc71); c2.position.y=2.65; g.add(c2);
+      const c3   = mkCon(0.68,1.18,8,0x58d68d); c3.position.y=3.14; g.add(c3);
+      break;
+    }
+    case 'flower': {
+      const stem = mkCyl(0.04,0.04,0.78,6,0x27ae60); stem.position.y=0.39; g.add(stem);
+      const ctr  = mkSph(0.17,0xf1c40f); ctr.position.y=0.86; g.add(ctr);
+      const pColors=[0xff69b4,0xff1493,0xff85c1,0xffb6c1,0xff69b4];
+      for(let i=0;i<5;i++){
+        const p = mkSph(0.14,pColors[i]); const a=(i/5)*Math.PI*2;
+        p.position.set(Math.cos(a)*0.27,0.86,Math.sin(a)*0.27); p.scale.y=1.38; g.add(p);
+      }
+      const leaf = mkBox(0.28,0.055,0.14,0x2ecc71); leaf.position.set(0.18,0.48,0); leaf.rotation.z=0.4; g.add(leaf);
+      break;
+    }
+    case 'cactus': {
+      const pot   = mkCyl(0.29,0.34,0.38,8,0xcd853f); pot.position.y=0.19; g.add(pot);
+      const trunk = mkCyl(0.23,0.19,1.35,8,0x27ae60); trunk.position.y=0.87; g.add(trunk);
+      const a1    = mkCyl(0.13,0.11,0.65,8,0x2ecc71); a1.position.set(0.38,1.05,0); a1.rotation.z=-Math.PI/3; g.add(a1);
+      const a1t   = mkCyl(0.11,0.11,0.48,8,0x2ecc71); a1t.position.set(0.66,1.44,0); g.add(a1t);
+      const a2    = mkCyl(0.13,0.11,0.58,8,0x2ecc71); a2.position.set(-0.33,0.88,0); a2.rotation.z=Math.PI/3; g.add(a2);
+      const a2t   = mkCyl(0.11,0.11,0.43,8,0x2ecc71); a2t.position.set(-0.58,1.25,0); g.add(a2t);
+      break;
+    }
+    case 'mushroom': {
+      const stem = mkCyl(0.19,0.24,0.68,8,0xffffff); stem.position.y=0.34; g.add(stem);
+      const cap  = new THREE.Mesh(new THREE.SphereGeometry(0.63,16,8,0,Math.PI*2,0,Math.PI/2),LM(0xe74c3c));
+      cap.position.y=0.68; g.add(cap);
+      for(let i=0;i<4;i++){
+        const spot=mkSph(0.077,0xffffff); const a=(i/4)*Math.PI*2+0.3;
+        spot.position.set(Math.cos(a)*0.34,0.83+Math.sin(a)*0.13,Math.sin(a)*0.34); g.add(spot);
+      }
+      break;
+    }
+    case 'rock': {
+      const r1=mkSph(0.48,0x95a5a6,8); r1.scale.set(1,0.63,0.78); r1.position.y=0.3; g.add(r1);
+      const r2=mkSph(0.29,0x7f8c8d,8); r2.scale.set(1,0.58,0.88); r2.position.set(0.28,0.18,0.1); g.add(r2);
+      break;
+    }
+    case 'fountain': {
+      const base = mkCyl(1.18,1.18,0.19,16,0xbdc3c7); base.position.y=0.095; g.add(base);
+      const w1   = mkCyl(1.13,1.13,0.14,16,0x5dade2); w1.position.y=0.24; g.add(w1);
+      const mid  = mkCyl(0.68,0.68,0.19,16,0xbdc3c7); mid.position.y=0.54; g.add(mid);
+      const w2   = mkCyl(0.63,0.63,0.14,16,0x5dade2); w2.position.y=0.68; g.add(w2);
+      const pillar=mkCyl(0.11,0.11,0.98,8,0xecf0f1); pillar.position.y=0.98; g.add(pillar);
+      const top  = mkSph(0.19,0xbdc3c7); top.position.y=1.52; g.add(top);
+      for(let i=0;i<4;i++){
+        const s=mkCyl(0.028,0.028,0.38,4,0x7ec8e3); const a=(i/4)*Math.PI*2;
+        s.position.set(Math.cos(a)*0.24,1.32,Math.sin(a)*0.24); s.rotation.z=0.4+(i%2)*0.1; g.add(s);
+      }
+      break;
+    }
+    case 'rainbow': {
+      const colors=[0xff0000,0xff7700,0xffff00,0x00cc00,0x0066ff,0x8800cc,0xff00ff];
+      for(let i=0;i<7;i++){
+        const arch=mkTor(1.45-i*0.12,0.07,8,20,colors[i]);
+        arch.rotation.x=Math.PI/2; arch.position.y=0.7; g.add(arch);
+      }
+      break;
+    }
+    case 'cloud': {
+      [[0,0.45,0,0.53],[-0.48,0.18,0,0.38],[0.48,0.18,0,0.38],[-0.24,0.34,0,0.43],[0.24,0.34,0,0.43]].forEach(([x,y,z,r])=>{
+        const s=mkSph(r,0xffffff); s.position.set(x,y,z); g.add(s);
+      });
+      break;
+    }
+    case 'planet': {
+      const planet=mkSph(0.68,0x9b59b6,18); planet.position.y=1.0; g.add(planet);
+      const ring  =mkTor(1.08,0.13,8,32,0xf39c12); ring.position.y=1.0; ring.rotation.x=0.95; g.add(ring);
+      const m1=mkSph(0.19,0x8e44ad); m1.position.set(0.38,1.08,0.48); g.add(m1);
+      const m2=mkSph(0.14,0xd7bde2); m2.position.set(-0.28,0.88,0.55); g.add(m2);
+      break;
+    }
+    case 'rocket': {
+      const body=mkCyl(0.29,0.29,1.55,8,0xe74c3c); body.position.y=1.08; g.add(body);
+      const nose=mkCon(0.29,0.68,8,0xc0392b); nose.position.y=2.21; g.add(nose);
+      const win =mkSph(0.14,0x85c1e9); win.position.set(0,1.38,0.3); g.add(win);
+      for(let i=0;i<3;i++){
+        const fin=mkBox(0.48,0.58,0.05,0xc0392b); const a=(i/3)*Math.PI*2;
+        fin.position.set(Math.cos(a)*0.29,0.48,Math.sin(a)*0.29); fin.rotation.y=a; g.add(fin);
+      }
+      const fl1=mkCon(0.24,0.48,8,0xf39c12); fl1.rotation.x=Math.PI; fl1.position.y=0.04; g.add(fl1);
+      const fl2=mkCon(0.14,0.38,8,0xf1c40f); fl2.rotation.x=Math.PI; fl2.position.y=0.0; g.add(fl2);
+      break;
+    }
+    case 'crystal': {
+      const geo=new THREE.OctahedronGeometry(0.58,0);
+      const c1=new THREE.Mesh(geo, PM(0x00bcd4,{transparent:true,opacity:0.85,shininess:200}));
+      c1.position.y=0.73; c1.scale.y=1.8; g.add(c1);
+      const c2=c1.clone(); c2.scale.setScalar(0.55); c2.position.set(0.58,0.38,0.2);
+      c2.material=PM(0x9c27b0,{transparent:true,opacity:0.85,shininess:200}); g.add(c2);
+      const c3=c1.clone(); c3.scale.setScalar(0.45); c3.position.set(-0.48,0.34,-0.14);
+      c3.material=PM(0xe91e63,{transparent:true,opacity:0.85,shininess:200}); g.add(c3);
+      break;
+    }
+    case 'balloon': {
+      const ball=mkSph(0.48,0xff4757); ball.position.y=1.95; g.add(ball);
+      const knot=mkSph(0.076,0xcc0000); knot.position.y=1.48; g.add(knot);
+      const str =mkCyl(0.014,0.014,1.44,4,0xffffff); str.position.y=0.72; g.add(str);
+      break;
+    }
+    case 'tent': {
+      const c=mkCon(1.75,2.15,4,0x3498db); c.position.y=1.07; c.rotation.y=Math.PI/4; g.add(c);
+      const stripe=mkBox(0.19,2.15,0.06,0xe74c3c); stripe.position.y=1.07; stripe.rotation.y=Math.PI/4; g.add(stripe);
+      const door=mkBox(0.38,0.68,0.06,0x2980b9); door.position.set(0,0.34,1.23); g.add(door);
+      break;
+    }
+    case 'castle': {
+      const tower=mkCyl(0.68,0.68,2.45,8,0x95a5a6); tower.position.y=1.22; g.add(tower);
+      const roof =mkCon(0.82,0.78,8,0xe74c3c); roof.position.y=2.86; g.add(roof);
+      [[-0.95,0],[0.95,0]].forEach(([x],i)=>{
+        const st=mkCyl(0.33,0.33,1.75,8,0x7f8c8d); st.position.set(x,0.87,0); g.add(st);
+        const sr=mkCon(0.43,0.58,8,0xc0392b); sr.position.set(x,2.03,0); g.add(sr);
+        for(let j=0;j<4;j++){
+          const bt=mkBox(0.11,0.19,0.11,0x808080); const a=(j/4)*Math.PI*2;
+          bt.position.set(x+Math.cos(a)*0.3,1.82,Math.sin(a)*0.3); g.add(bt);
+        }
+      });
+      for(let i=0;i<6;i++){
+        const bt=mkBox(0.14,0.24,0.14,0x808080); const a=(i/6)*Math.PI*2;
+        bt.position.set(Math.cos(a)*0.67,2.58,Math.sin(a)*0.67); g.add(bt);
+      }
+      const win=mkBox(0.24,0.34,0.06,0x3498db); win.position.set(0,1.48,0.69); g.add(win);
+      const door=mkBox(0.38,0.58,0.06,0x2c3e50); door.position.set(0,0.48,0.69); g.add(door);
+      break;
+    }
+    case 'chest': {
+      const base=mkBox(1.18,0.58,0.78,0x8b4513); base.position.y=0.29; g.add(base);
+      const lid =mkBox(1.18,0.33,0.78,0xa0522d); lid.position.y=0.76; lid.rotation.x=-0.19; g.add(lid);
+      const b1  =mkBox(1.19,0.055,0.79,0xd4af37); b1.position.y=0.29; g.add(b1);
+      const b2  =b1.clone(); b2.position.y=0.48; g.add(b2);
+      const lock=mkBox(0.17,0.19,0.07,0xffd700); lock.position.set(0,0.56,0.41); g.add(lock);
+      for(let i=0;i<3;i++){
+        const gld=mkSph(0.075,0xffd700); gld.position.set(-0.24+i*0.24,0.7,0.08); g.add(gld);
+      }
+      break;
+    }
+    case 'slide': {
+      const tower=mkBox(0.78,1.75,0.78,0xff6b35); tower.position.set(-0.88,0.87,0); g.add(tower);
+      for(let i=0;i<4;i++){
+        const step=mkBox(0.38,0.07,0.48,0xff8c61); step.position.set(-0.68-i*0.09,0.19+i*0.38,0); g.add(step);
+      }
+      const sl=mkBox(1.75,0.07,0.76,0xffcd3c); sl.rotation.z=0.48; sl.position.set(0.28,0.68,0); g.add(sl);
+      const rl1=mkCyl(0.048,0.048,1.88,6,0xff6b35); rl1.position.set(0.22,0.72,0.43); rl1.rotation.z=0.48; g.add(rl1);
+      const rl2=rl1.clone(); rl2.position.z=-0.43; g.add(rl2);
+      break;
+    }
+    default: {
+      const cols=[0xff6b6b,0x4ecdc4,0xffe66d,0x6c5ce7,0x55efc4,0xfd79a8];
+      const m=mkBox(0.78,0.78,0.78, cols[Math.floor(Math.random()*cols.length)]);
+      m.position.y=0.39; g.add(m);
+    }
+  }
+  return shadow(g);
+}
+
+// ── GAME STATE ────────────────────────────────────────────────────────────────
+let threeScene, camera, renderer, controls;
+let ghost = null, selectedItemId = null;
+let placedObjects = [];
+let coins = 0, score = 0;
+let currentSceneId = 'bedroom';
+let sceneRefs = { floor:null, extras:[] };
+let raycaster, mouse;
+let audioCtx = null, musicPlaying = false, musicScheduler = null, currentNote = 0;
+
+// ── THREE INIT ────────────────────────────────────────────────────────────────
+function initThree() {
+  const container = document.getElementById('canvas-container');
+  const canvas    = document.getElementById('threeCanvas');
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+
+  threeScene = new THREE.Scene();
+
+  camera = new THREE.PerspectiveCamera(60, container.clientWidth/container.clientHeight, 0.1, 100);
+  camera.position.set(0, 7, 11);
+
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.target.set(0,1,0);
+  controls.enableDamping  = true;
+  controls.dampingFactor  = 0.05;
+  controls.minDistance    = 3;
+  controls.maxDistance    = 22;
+  controls.maxPolarAngle  = Math.PI/2 - 0.03;
+  controls.mouseButtons   = { LEFT:null, MIDDLE:THREE.MOUSE.DOLLY, RIGHT:THREE.MOUSE.ROTATE };
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+  threeScene.add(ambient);
+  const sun = new THREE.DirectionalLight(0xffe4b5, 1.0);
+  sun.position.set(5,10,5);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048,2048);
+  sun.shadow.camera.left = sun.shadow.camera.bottom = -14;
+  sun.shadow.camera.right = sun.shadow.camera.top = 14;
+  sun.shadow.camera.far = 50;
+  threeScene.add(sun);
+
+  raycaster = new THREE.Raycaster();
+  mouse     = new THREE.Vector2();
+
+  buildSceneGeometry('bedroom');
+
+  const grid = new THREE.GridHelper(16,16,0x888888,0x888888);
+  grid.position.y = 0.012;
+  grid.material.transparent = true; grid.material.opacity = 0.25;
+  threeScene.add(grid);
+  sceneRefs.extras.push(grid);
+
+  window.addEventListener('resize', onResize);
+  container.addEventListener('mousemove', onMouseMove);
+  container.addEventListener('click', onClick);
+  container.addEventListener('contextmenu', e => { e.preventDefault(); if(selectedItemId) cancelPlacement(); });
+  document.addEventListener('keydown', e => { if(e.key==='Escape') cancelPlacement(); });
+
+  animate();
+}
+
+// ── SCENE GEOMETRY ────────────────────────────────────────────────────────────
+function buildSceneGeometry(id) {
+  // Remove old
+  if(sceneRefs.floor) threeScene.remove(sceneRefs.floor);
+  sceneRefs.extras.forEach(x => threeScene.remove(x));
+  sceneRefs.extras = [];
+
+  const cfg = SCENES[id];
+  renderer.setClearColor(cfg.sky);
+  threeScene.fog = new THREE.Fog(cfg.fog, 16, 34);
+
+  threeScene.children.forEach(c => {
+    if(c.isAmbientLight)    c.color.setHex(cfg.ambient);
+    if(c.isDirectionalLight) c.color.setHex(cfg.sun);
+  });
+
+  // Floor
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(16,16), LM(cfg.floor));
+  floor.rotation.x = -Math.PI/2;
+  floor.receiveShadow = true;
+  floor.userData.isFloor = true;
+  threeScene.add(floor);
+  sceneRefs.floor = floor;
+
+  // Walls — always present, tagged for raycasting
+  {
+    const wm = new THREE.MeshLambertMaterial({ color: cfg.wallColor, side: THREE.FrontSide });
+    const wallDefs = [
+      { p:[0,2.5,-8],  r:[0,0,0],           normal: new THREE.Vector3(0,0,1),  axis:'z', sign:1  },
+      { p:[-8,2.5,0],  r:[0,Math.PI/2,0],   normal: new THREE.Vector3(1,0,0),  axis:'x', sign:1  },
+      { p:[8,2.5,0],   r:[0,-Math.PI/2,0],  normal: new THREE.Vector3(-1,0,0), axis:'x', sign:-1 },
+    ];
+    wallDefs.forEach(({p,r,normal,axis,sign})=>{
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(16,5), wm.clone());
+      w.position.set(...p); w.rotation.set(...r); w.receiveShadow=true;
+      w.userData.isWall   = true;
+      w.userData.wallNormal = normal;
+      w.userData.wallAxis   = axis;
+      w.userData.wallSign   = sign;
+      threeScene.add(w); sceneRefs.extras.push(w);
+    });
+  }
+
+  // Scene-specific extras
+  if(id === 'space') {
+    const verts=[];
+    for(let i=0;i<600;i++) verts.push((Math.random()-0.5)*70, Math.random()*32+2, (Math.random()-0.5)*70);
+    const sg=new THREE.BufferGeometry();
+    sg.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+    const stars=new THREE.Points(sg, new THREE.PointsMaterial({color:0xffffff,size:0.22}));
+    threeScene.add(stars); sceneRefs.extras.push(stars);
+    stars.userData.rotates=true;
+  }
+  if(id === 'ocean') {
+    const verts=[];
+    for(let i=0;i<120;i++) verts.push((Math.random()-0.5)*14, Math.random()*5, (Math.random()-0.5)*14);
+    const bg=new THREE.BufferGeometry();
+    bg.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+    const bubbles=new THREE.Points(bg, new THREE.PointsMaterial({color:0xaaddff,size:0.14,transparent:true,opacity:0.7}));
+    threeScene.add(bubbles); sceneRefs.extras.push(bubbles);
+    bubbles.userData.bobs=true;
+  }
+  if(id==='candy') {
+    for(let i=-3;i<=3;i++){
+      const s=new THREE.Mesh(new THREE.PlaneGeometry(16,0.28),LM(i%2===0?0xff1493:0xff69b4));
+      s.rotation.x=-Math.PI/2; s.position.set(i*1.45,0.011,0);
+      threeScene.add(s); sceneRefs.extras.push(s);
+    }
+  }
+
+  // Grid (re-add after scene change since we removed extras)
+  const grid = new THREE.GridHelper(16,16,0x888888,0x888888);
+  grid.position.y=0.012; grid.material.transparent=true; grid.material.opacity=0.22;
+  threeScene.add(grid); sceneRefs.extras.push(grid);
+}
+
+function switchScene(id, btn) {
+  cancelPlacement();
+  placedObjects.forEach(o => threeScene.remove(o));
+  placedObjects=[];
+  currentSceneId=id;
+  buildSceneGeometry(id);
+  updateStats();
+  document.querySelectorAll('.scene-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+}
+
+// ── PLACEMENT ─────────────────────────────────────────────────────────────────
+function selectCatalogItem(id, cardEl) {
+  document.querySelectorAll('.item-card').forEach(c=>c.classList.remove('selected'));
+  if(selectedItemId===id){ cancelPlacement(); return; }
+  selectedItemId=id; cardEl.classList.add('selected');
+
+  if(ghost) threeScene.remove(ghost);
+  ghost = createItem(id);
+  ghost.traverse(m => {
+    if(m.isMesh){ m.material=m.material.clone(); m.material.transparent=true; m.material.opacity=0.45; }
+  });
+  threeScene.add(ghost);
+  const entry=CATALOG.find(x=>x.id===id);
+  setHint(`🎯 Placing "${entry.name}" — click to place! Right-click or Esc to cancel`);
+  document.getElementById('canvas-container').style.cursor='crosshair';
+  controls.enabled=false;
+}
+
+// Returns { point, isWall, wallData } — checks floor first, then walls
+function getSurfacePoint(event) {
+  const c=document.getElementById('canvas-container');
+  const r=c.getBoundingClientRect();
+  mouse.x=((event.clientX-r.left)/c.clientWidth)*2-1;
+  mouse.y=-((event.clientY-r.top)/c.clientHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits=raycaster.intersectObjects(threeScene.children,true);
+  // Walk up to the root mesh userData (PlaneGeometry walls are direct children)
+  for(const h of hits){
+    let obj = h.object;
+    // check the hit mesh and its parent chain for wall/floor flags
+    while(obj){
+      if(obj.userData.isFloor) return { point: h.point, isWall: false };
+      if(obj.userData.isWall)  return { point: h.point, isWall: true, wallData: obj.userData };
+      obj = obj.parent;
+    }
+  }
+  // Fallback: floor plane
+  const plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+  const t=new THREE.Vector3();
+  raycaster.ray.intersectPlane(plane,t);
+  return t ? { point: t, isWall: false } : null;
+}
+
+function snap(v){ return Math.round(v/0.5)*0.5; }
+function snapY(v){ return Math.round(v/0.25)*0.25; }
+
+function applyPlacement(item, point, isWall, wallData) {
+  if(isWall && wallData) {
+    const n = wallData.wallNormal;
+    const OFFSET = 0.12; // push item off the wall surface
+    item.position.set(
+      point.x + n.x * OFFSET,
+      Math.max(0.3, snapY(point.y)),
+      point.z + n.z * OFFSET
+    );
+    // rotate so the item faces away from the wall (into the room)
+    if(n.z > 0.5)       item.rotation.y = 0;
+    else if(n.z < -0.5) item.rotation.y = Math.PI;
+    else if(n.x > 0.5)  item.rotation.y = -Math.PI/2;
+    else                 item.rotation.y =  Math.PI/2;
+  } else {
+    item.position.set(snap(point.x), 0, snap(point.z));
+    item.rotation.y = 0;
+  }
+}
+
+function onMouseMove(event) {
+  if(!selectedItemId||!ghost) return;
+  const result=getSurfacePoint(event);
+  if(result) applyPlacement(ghost, result.point, result.isWall, result.wallData);
+}
+
+function onClick(event) {
+  if(event.button!==0||!selectedItemId) return;
+  const result=getSurfacePoint(event);
+  if(!result) return;
+  const item=createItem(selectedItemId);
+  applyPlacement(item, result.point, result.isWall, result.wallData);
+  threeScene.add(item); placedObjects.push(item);
+  const entry=CATALOG.find(x=>x.id===selectedItemId);
+  const earned=entry?entry.coins:5;
+  awardCoins(earned, event.clientX, event.clientY);
+  playPlaceSound();
+  // refresh ghost
+  if(ghost) threeScene.remove(ghost);
+  ghost=createItem(selectedItemId);
+  ghost.traverse(m=>{ if(m.isMesh){ m.material=m.material.clone(); m.material.transparent=true; m.material.opacity=0.45; }});
+  applyPlacement(ghost, result.point, result.isWall, result.wallData);
+  threeScene.add(ghost);
+  updateStats();
+}
+
+function cancelPlacement() {
+  selectedItemId=null;
+  if(ghost){ threeScene.remove(ghost); ghost=null; }
+  document.querySelectorAll('.item-card').forEach(c=>c.classList.remove('selected'));
+  setHint('👆 Pick an item from the left panel, then click to place it!');
+  document.getElementById('canvas-container').style.cursor='default';
+  controls.enabled=true;
+}
+
+function clearAll() {
+  if(!confirm('Clear all placed items? Your coins stay!')) return;
+  placedObjects.forEach(o=>threeScene.remove(o)); placedObjects=[];
+  cancelPlacement(); updateStats();
+}
+
+// ── COINS & UI ────────────────────────────────────────────────────────────────
+function awardCoins(amount, cx, cy) {
+  coins+=amount; score+=amount;
+  document.getElementById('coinCount').textContent=coins;
+  updateStats();
+  const c=document.getElementById('canvas-container');
+  const r=c.getBoundingClientRect();
+  const pop=document.createElement('div');
+  pop.className='coin-anim';
+  pop.textContent=`+${amount} 🪙`;
+  pop.style.left=(cx-r.left-24)+'px';
+  pop.style.top=(cy-r.top-10)+'px';
+  c.appendChild(pop);
+  setTimeout(()=>pop.remove(),1200);
+}
+function updateStats() {
+  document.getElementById('itemCountDisplay').textContent=placedObjects.length;
+  document.getElementById('scoreDisplay').textContent=score;
+}
+function setHint(t){ document.getElementById('hint').textContent=t; }
+
+// ── MUSIC ─────────────────────────────────────────────────────────────────────
+const MELODY=[523.25,587.33,659.25,783.99,880,783.99,659.25,587.33,
+              523.25,659.25,783.99,880,1046.5,880,783.99,523.25];
+const BASS  =[130.81,130.81,196,196,174.61,174.61,196,196];
+const BEAT  =0.24;
+
+function toggleMusic() {
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  musicPlaying=!musicPlaying;
+  document.getElementById('musicBtn').textContent=musicPlaying?'🔇':'🎵';
+  if(musicPlaying){ currentNote=0; scheduleNext(); }
+  else if(musicScheduler){ clearTimeout(musicScheduler); musicScheduler=null; }
+}
+
+function scheduleNext() {
+  if(!musicPlaying) return;
+  const now=audioCtx.currentTime;
+  const mi=currentNote%MELODY.length, bi=Math.floor(currentNote/2)%BASS.length;
+  const master=audioCtx.createGain(); master.gain.value=0.28; master.connect(audioCtx.destination);
+  const del=audioCtx.createDelay(0.5); del.delayTime.value=0.28;
+  const dg=audioCtx.createGain(); dg.gain.value=0.22; del.connect(dg); dg.connect(master);
+
+  // melody
+  const o=audioCtx.createOscillator(), og=audioCtx.createGain(); o.type='sine';
+  o.frequency.value=MELODY[mi]; og.gain.setValueAtTime(0,now);
+  og.gain.linearRampToValueAtTime(0.55,now+0.018); og.gain.exponentialRampToValueAtTime(0.001,now+BEAT*0.88);
+  o.connect(og); og.connect(master); og.connect(del); o.start(now); o.stop(now+BEAT);
+
+  // bass every 2nd note
+  if(currentNote%2===0){
+    const b=audioCtx.createOscillator(), bg=audioCtx.createGain(); b.type='triangle';
+    b.frequency.value=BASS[bi]; bg.gain.setValueAtTime(0,now);
+    bg.gain.linearRampToValueAtTime(0.38,now+0.018); bg.gain.exponentialRampToValueAtTime(0.001,now+BEAT*1.85);
+    b.connect(bg); bg.connect(master); b.start(now); b.stop(now+BEAT*2);
+  }
+  // sparkle every 4th note
+  if(currentNote%4===0){
+    const s=audioCtx.createOscillator(), sg=audioCtx.createGain(); s.type='sine';
+    s.frequency.value=MELODY[mi]*2; sg.gain.setValueAtTime(0,now);
+    sg.gain.linearRampToValueAtTime(0.13,now+0.01); sg.gain.exponentialRampToValueAtTime(0.001,now+BEAT*0.45);
+    s.connect(sg); sg.connect(master); s.start(now); s.stop(now+BEAT*0.5);
+  }
+
+  currentNote++;
+  musicScheduler=setTimeout(scheduleNext, BEAT*1000*0.88);
+}
+
+function playPlaceSound() {
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.frequency.setValueAtTime(560,audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(880,audioCtx.currentTime+0.1);
+  g.gain.setValueAtTime(0.28,audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.22);
+  o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.22);
+}
+
+// ── RENDER LOOP ───────────────────────────────────────────────────────────────
+let t=0;
+function animate() {
+  requestAnimationFrame(animate);
+  t+=0.012;
+  if(ghost) ghost.rotation.y=t;
+  sceneRefs.extras.forEach(x=>{
+    if(x.userData.rotates) x.rotation.y=t*0.04;
+    if(x.userData.bobs){ x.position.y=Math.sin(t*0.8)*0.12; }
+  });
+  // gentle bob on placed balloons/clouds/planets
+  placedObjects.forEach(obj => {
+    const id=obj.userData.itemId;
+    if(id==='balloon'||id==='cloud'||id==='planet'){
+      obj.position.y=Math.sin(t+obj.id)*0.08;
+    }
+  });
+  controls.update();
+  renderer.render(threeScene,camera);
+}
+
+function onResize() {
+  const c=document.getElementById('canvas-container');
+  camera.aspect=c.clientWidth/c.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(c.clientWidth,c.clientHeight);
+}
+
+// ── BUILD PANEL ───────────────────────────────────────────────────────────────
+function buildPanel() {
+  const panel=document.getElementById('item-panel');
+  const cats={};
+  CATALOG.forEach(item=>{ if(!cats[item.cat]) cats[item.cat]=[]; cats[item.cat].push(item); });
+  Object.entries(cats).forEach(([cat,items])=>{
+    const lbl=document.createElement('div'); lbl.className='cat-label'; lbl.textContent=cat; panel.appendChild(lbl);
+    const grid=document.createElement('div'); grid.className='item-grid';
+    items.forEach(item=>{
+      const card=document.createElement('div'); card.className='item-card'; card.id='card-'+item.id;
+      card.innerHTML=`<span class="item-icon">${item.icon}</span><span class="item-name">${item.name}</span><span class="item-val">+${item.coins}🪙</span>`;
+      card.onclick=()=>selectCatalogItem(item.id,card);
+      grid.appendChild(card);
+    });
+    panel.appendChild(grid);
+  });
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+buildPanel();
+window.addEventListener('load', initThree);
+</script>
+</body>
+</html>
