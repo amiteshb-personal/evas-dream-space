@@ -611,6 +611,8 @@ function initThree() {
   sceneRefs.extras.push(grid);
 
   window.addEventListener('resize', onResize);
+  // ResizeObserver keeps canvas sized correctly whenever the container changes
+  new ResizeObserver(onResize).observe(container);
   container.addEventListener('mousemove', onMouseMove);
   container.addEventListener('click', onClick);
   container.addEventListener('contextmenu', e => { e.preventDefault(); if(selectedItemId) cancelPlacement(); });
@@ -620,6 +622,8 @@ function initThree() {
   document.addEventListener('keydown', onKeyDown);
 
   animate();
+  // Ensure correct size after first paint in case layout wasn't complete at load time
+  requestAnimationFrame(onResize);
 }
 
 // ── SCENE GEOMETRY ────────────────────────────────────────────────────────────
@@ -799,10 +803,9 @@ function selectCatalogItem(id, cardEl) {
 
 // Returns { point, isWall, wallData } — checks floor first, then walls
 function getSurfacePoint(event) {
-  const c=document.getElementById('canvas-container');
-  const r=c.getBoundingClientRect();
-  mouse.x=((event.clientX-r.left)/c.clientWidth)*2-1;
-  mouse.y=-((event.clientY-r.top)/c.clientHeight)*2+1;
+  const r=getCanvasRect();
+  mouse.x=((event.clientX-r.left)/r.width)*2-1;
+  mouse.y=-((event.clientY-r.top)/r.height)*2+1;
   raycaster.setFromCamera(mouse, camera);
   const hits=raycaster.intersectObjects(threeScene.children,true);
   // Walk up to the root mesh userData (PlaneGeometry walls are direct children)
@@ -909,7 +912,9 @@ function onClick(event) {
     else deselectPlacedObject();
     return;
   }
-  // ── Placement mode ──
+  // ── Placement mode — but if user clicks an existing item, cancel & select it ──
+  const hitExisting=getHitPlacedObject(event);
+  if(hitExisting){ cancelPlacement(); selectPlacedObject(hitExisting); return; }
   const result=getSurfacePoint(event);
   if(!result) return;
   const item=createItem(selectedItemId);
@@ -929,11 +934,15 @@ function onClick(event) {
 }
 
 // ── PLACED-ITEM SELECTION ─────────────────────────────────────────────────────
-function getHitPlacedObject(event) {
+function getCanvasRect() {
   const c=document.getElementById('canvas-container');
   const r=c.getBoundingClientRect();
-  mouse.x=((event.clientX-r.left)/c.clientWidth)*2-1;
-  mouse.y=-((event.clientY-r.top)/c.clientHeight)*2+1;
+  return { left:r.left, top:r.top, width:r.width||c.clientWidth||1, height:r.height||c.clientHeight||1 };
+}
+function getHitPlacedObject(event) {
+  const r=getCanvasRect();
+  mouse.x=((event.clientX-r.left)/r.width)*2-1;
+  mouse.y=-((event.clientY-r.top)/r.height)*2+1;
   raycaster.setFromCamera(mouse, camera);
   const hits=raycaster.intersectObjects(placedObjects, true);
   if(!hits.length) return null;
@@ -1150,9 +1159,12 @@ function animate() {
 
 function onResize() {
   const c=document.getElementById('canvas-container');
-  camera.aspect=c.clientWidth/c.clientHeight;
+  const w=c.clientWidth||c.getBoundingClientRect().width||window.innerWidth-150;
+  const h=c.clientHeight||c.getBoundingClientRect().height||window.innerHeight-56;
+  if(w===0||h===0) return; // not laid out yet, skip
+  camera.aspect=w/h;
   camera.updateProjectionMatrix();
-  renderer.setSize(c.clientWidth,c.clientHeight);
+  renderer.setSize(w,h);
 }
 
 // ── BUILD PANEL ───────────────────────────────────────────────────────────────
