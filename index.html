@@ -613,12 +613,15 @@ function initThree() {
   window.addEventListener('resize', onResize);
   // ResizeObserver keeps canvas sized correctly whenever the container changes
   new ResizeObserver(onResize).observe(container);
-  container.addEventListener('mousemove', onMouseMove);
-  container.addEventListener('click', onClick);
-  container.addEventListener('contextmenu', e => { e.preventDefault(); if(selectedItemId) cancelPlacement(); });
-  container.addEventListener('wheel', onWheel, { passive: false });
-  container.addEventListener('mousedown', onMouseDown);
-  container.addEventListener('mouseup',   onMouseUp);
+  // Attach interaction events directly to the canvas so they fire
+  // before OrbitControls can interfere with bubbling
+  const cvs = renderer.domElement;
+  cvs.addEventListener('mousemove',   onMouseMove);
+  cvs.addEventListener('click',       onClick);
+  cvs.addEventListener('contextmenu', e => { e.preventDefault(); if(selectedItemId) cancelPlacement(); });
+  cvs.addEventListener('wheel',       onWheel, { passive: false });
+  cvs.addEventListener('mousedown',   onMouseDown);
+  cvs.addEventListener('mouseup',     onMouseUp);
   document.addEventListener('keydown', onKeyDown);
 
   animate();
@@ -935,9 +938,12 @@ function onClick(event) {
 
 // ── PLACED-ITEM SELECTION ─────────────────────────────────────────────────────
 function getCanvasRect() {
-  const c=document.getElementById('canvas-container');
-  const r=c.getBoundingClientRect();
-  return { left:r.left, top:r.top, width:r.width||c.clientWidth||1, height:r.height||c.clientHeight||1 };
+  const cvs=document.getElementById('threeCanvas');
+  const r=cvs.getBoundingClientRect();
+  // Fall back to style dimensions set by renderer.setSize if bounding rect is 0
+  const w=r.width  || parseFloat(cvs.style.width)  || cvs.width  || window.innerWidth-150;
+  const h=r.height || parseFloat(cvs.style.height) || cvs.height || window.innerHeight-56;
+  return { left:r.left, top:r.top, width:w, height:h };
 }
 function getHitPlacedObject(event) {
   const r=getCanvasRect();
