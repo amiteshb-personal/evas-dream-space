@@ -529,6 +529,7 @@ let currentSceneId = 'bedroom';
 let sceneRefs = { floor:null, extras:[] };
 let raycaster, mouse;
 let audioCtx = null, musicPlaying = false, musicScheduler = null, currentNote = 0;
+let placementRotation = 0; // Y-axis rotation applied when placing
 
 // ── THREE INIT ────────────────────────────────────────────────────────────────
 function initThree() {
@@ -581,7 +582,8 @@ function initThree() {
   container.addEventListener('mousemove', onMouseMove);
   container.addEventListener('click', onClick);
   container.addEventListener('contextmenu', e => { e.preventDefault(); if(selectedItemId) cancelPlacement(); });
-  document.addEventListener('keydown', e => { if(e.key==='Escape') cancelPlacement(); });
+  container.addEventListener('wheel', onWheel, { passive: false });
+  document.addEventListener('keydown', onKeyDown);
 
   animate();
 }
@@ -756,7 +758,7 @@ function selectCatalogItem(id, cardEl) {
   });
   threeScene.add(ghost);
   const entry=CATALOG.find(x=>x.id===id);
-  setHint(`🎯 Placing "${entry.name}" — click to place! Right-click or Esc to cancel`);
+  setHint(`🎯 "${entry.name}" — Click to place · Scroll or ← → to rotate · Esc to cancel`);
   document.getElementById('canvas-container').style.cursor='crosshair';
   controls.enabled=false;
 }
@@ -792,20 +794,22 @@ function snapY(v){ return Math.round(v/0.25)*0.25; }
 function applyPlacement(item, point, isWall, wallData) {
   if(isWall && wallData) {
     const n = wallData.wallNormal;
-    const OFFSET = 0.12; // push item off the wall surface
+    const OFFSET = 0.12;
     item.position.set(
       point.x + n.x * OFFSET,
       Math.max(0.3, snapY(point.y)),
       point.z + n.z * OFFSET
     );
-    // rotate so the item faces away from the wall (into the room)
-    if(n.z > 0.5)       item.rotation.y = 0;
-    else if(n.z < -0.5) item.rotation.y = Math.PI;
-    else if(n.x > 0.5)  item.rotation.y = -Math.PI/2;
-    else                 item.rotation.y =  Math.PI/2;
+    // base wall-facing rotation + player's chosen rotation
+    let base = 0;
+    if(n.z > 0.5)       base = 0;
+    else if(n.z < -0.5) base = Math.PI;
+    else if(n.x > 0.5)  base = -Math.PI/2;
+    else                 base =  Math.PI/2;
+    item.rotation.y = base + placementRotation;
   } else {
     item.position.set(snap(point.x), 0, snap(point.z));
-    item.rotation.y = 0;
+    item.rotation.y = placementRotation;
   }
 }
 
@@ -835,8 +839,22 @@ function onClick(event) {
   updateStats();
 }
 
+function onWheel(e) {
+  if(!selectedItemId) return;
+  e.preventDefault();
+  placementRotation += e.deltaY * 0.005;
+}
+
+function onKeyDown(e) {
+  if(e.key === 'Escape') { cancelPlacement(); return; }
+  if(!selectedItemId) return;
+  if(e.key === 'ArrowLeft')  { placementRotation -= Math.PI/4; e.preventDefault(); }
+  if(e.key === 'ArrowRight') { placementRotation += Math.PI/4; e.preventDefault(); }
+}
+
 function cancelPlacement() {
   selectedItemId=null;
+  placementRotation=0;
   if(ghost){ threeScene.remove(ghost); ghost=null; }
   document.querySelectorAll('.item-card').forEach(c=>c.classList.remove('selected'));
   setHint('👆 Pick an item from the left panel, then click to place it!');
@@ -935,7 +953,7 @@ let t=0;
 function animate() {
   requestAnimationFrame(animate);
   t+=0.012;
-  if(ghost) ghost.rotation.y=t;
+  if(ghost) ghost.rotation.y = placementRotation + Math.sin(t*2)*0.18; // gentle wobble around chosen angle
   sceneRefs.extras.forEach(x=>{
     if(x.userData.rotates) x.rotation.y=t*0.04;
     if(x.userData.bobs){ x.position.y=Math.sin(t*0.8)*0.12; }
