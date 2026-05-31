@@ -102,6 +102,25 @@ canvas { display:block; }
   padding:6px 10px; border-radius:10px; font-size:10px;
   backdrop-filter:blur(4px); line-height:1.7; pointer-events:none;
 }
+#selection-bar {
+  position:absolute; bottom:52px; left:50%; transform:translateX(-50%);
+  background:rgba(20,0,40,0.88); border:2px solid #e040fb;
+  border-radius:30px; padding:7px 14px;
+  display:none; gap:7px; align-items:center;
+  backdrop-filter:blur(8px);
+  box-shadow:0 0 24px rgba(224,64,251,0.5);
+  white-space:nowrap;
+}
+#sel-label { color:#e040fb; font-size:12px; font-weight:900; margin-right:2px; }
+.sel-divider { width:1px; height:22px; background:rgba(224,64,251,0.4); }
+.sel-btn {
+  background:rgba(255,255,255,0.12); border:2px solid rgba(255,255,255,0.3);
+  color:white; padding:5px 11px; border-radius:20px; cursor:pointer;
+  font-size:12px; font-weight:800; transition:all 0.15s;
+}
+.sel-btn:hover { background:rgba(255,255,255,0.3); transform:scale(1.09); }
+.del-btn { border-color:#ff5555 !important; color:#ff9999; }
+.del-btn:hover { background:rgba(255,60,60,0.4) !important; color:white; }
 </style>
 </head>
 <body>
@@ -133,7 +152,17 @@ canvas { display:block; }
     <div id="controls-hint">
       🖱️ Right-drag: rotate<br>
       🖱️ Scroll: zoom<br>
-      ⎋ Esc: cancel placing
+      ⎋ Esc: cancel / deselect
+    </div>
+    <!-- Selection toolbar — shown when a placed item is selected -->
+    <div id="selection-bar">
+      <span id="sel-label">✨ Selected</span>
+      <div class="sel-divider"></div>
+      <button class="sel-btn" onclick="scaleSelected(1.18)" title="Make bigger">➕ Bigger</button>
+      <button class="sel-btn" onclick="scaleSelected(0.85)" title="Make smaller">➖ Smaller</button>
+      <button class="sel-btn" onclick="rotateSelected(-Math.PI/4)" title="Rotate left">↩️ Left</button>
+      <button class="sel-btn" onclick="rotateSelected(Math.PI/4)"  title="Rotate right">↪️ Right</button>
+      <button class="sel-btn del-btn" onclick="deleteSelected()" title="Delete">🗑️ Delete</button>
     </div>
   </div>
 </div>
@@ -529,7 +558,10 @@ let currentSceneId = 'bedroom';
 let sceneRefs = { floor:null, extras:[] };
 let raycaster, mouse;
 let audioCtx = null, musicPlaying = false, musicScheduler = null, currentNote = 0;
-let placementRotation = 0; // Y-axis rotation applied when placing
+let placementRotation = 0;
+let selectedPlacedObject = null;
+let isDraggingSelected = false;
+let _mouseDownX = 0, _mouseDownY = 0;
 
 // ── THREE INIT ────────────────────────────────────────────────────────────────
 function initThree() {
@@ -583,6 +615,8 @@ function initThree() {
   container.addEventListener('click', onClick);
   container.addEventListener('contextmenu', e => { e.preventDefault(); if(selectedItemId) cancelPlacement(); });
   container.addEventListener('wheel', onWheel, { passive: false });
+  container.addEventListener('mousedown', onMouseDown);
+  container.addEventListener('mouseup',   onMouseUp);
   document.addEventListener('keydown', onKeyDown);
 
   animate();
@@ -813,14 +847,69 @@ function applyPlacement(item, point, isWall, wallData) {
   }
 }
 
+function onMouseDown(event) {
+  if(event.button !== 0) return;
+  _mouseDownX = event.clientX; _mouseDownY = event.clientY;
+  if(selectedItemId) return; // placement mode handles its own logic
+  if(!selectedPlacedObject) return;
+  const hit = getHitPlacedObject(event);
+  if(hit === selectedPlacedObject) {
+    isDraggingSelected = true;
+    controls.enabled = false;
+    document.getElementById('canvas-container').style.cursor = 'grabbing';
+  }
+}
+
+function onMouseUp(event) {
+  if(isDraggingSelected) {
+    isDraggingSelected = false;
+    controls.enabled = true;
+    document.getElementById('canvas-container').style.cursor = 'default';
+  }
+}
+
 function onMouseMove(event) {
+  // Move a selected placed item by dragging
+  if(isDraggingSelected && selectedPlacedObject) {
+    const result = getSurfacePoint(event);
+    if(result) {
+      if(result.isWall && result.wallData) {
+        const n = result.wallData.wallNormal;
+        selectedPlacedObject.position.set(
+          result.point.x + n.x * 0.12,
+          Math.max(0.3, snapY(result.point.y)),
+          result.point.z + n.z * 0.12
+        );
+      } else {
+        selectedPlacedObject.position.set(snap(result.point.x), 0, snap(result.point.z));
+      }
+    }
+    return;
+  }
+  // Show grab cursor when hovering over selected item
+  if(!selectedItemId && selectedPlacedObject && !isDraggingSelected) {
+    const hit = getHitPlacedObject(event);
+    document.getElementById('canvas-container').style.cursor =
+      (hit === selectedPlacedObject) ? 'grab' : 'default';
+  }
+  // Move placement ghost
   if(!selectedItemId||!ghost) return;
   const result=getSurfacePoint(event);
   if(result) applyPlacement(ghost, result.point, result.isWall, result.wallData);
 }
 
 function onClick(event) {
-  if(event.button!==0||!selectedItemId) return;
+  if(event.button!==0) return;
+  // Ignore if this was actually a drag (moved > 6px)
+  if(Math.hypot(event.clientX-_mouseDownX, event.clientY-_mouseDownY) > 6) return;
+  // ── Not in placement mode: try to select a placed item ──
+  if(!selectedItemId) {
+    const hit=getHitPlacedObject(event);
+    if(hit) selectPlacedObject(hit);
+    else deselectPlacedObject();
+    return;
+  }
+  // ── Placement mode ──
   const result=getSurfacePoint(event);
   if(!result) return;
   const item=createItem(selectedItemId);
@@ -839,17 +928,97 @@ function onClick(event) {
   updateStats();
 }
 
+// ── PLACED-ITEM SELECTION ─────────────────────────────────────────────────────
+function getHitPlacedObject(event) {
+  const c=document.getElementById('canvas-container');
+  const r=c.getBoundingClientRect();
+  mouse.x=((event.clientX-r.left)/c.clientWidth)*2-1;
+  mouse.y=-((event.clientY-r.top)/c.clientHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits=raycaster.intersectObjects(placedObjects, true);
+  if(!hits.length) return null;
+  let obj=hits[0].object;
+  while(obj.parent && !placedObjects.includes(obj)) obj=obj.parent;
+  return placedObjects.includes(obj) ? obj : null;
+}
+
+function selectPlacedObject(obj) {
+  if(selectedPlacedObject===obj) return;
+  deselectPlacedObject();
+  selectedPlacedObject=obj;
+  // Highlight: set emissive glow on all meshes
+  obj.traverse(m => {
+    if(m.isMesh && m.material) {
+      if(!m.userData.origEmissive) m.userData.origEmissive = m.material.emissive.clone();
+      m.material.emissive.setHex(0x221100);
+    }
+  });
+  document.getElementById('selection-bar').style.display='flex';
+  setHint('✅ Selected — Drag: move · Scroll: resize · ← →: rotate · Del: delete · Esc: deselect');
+}
+
+function deselectPlacedObject() {
+  if(!selectedPlacedObject) return;
+  selectedPlacedObject.traverse(m => {
+    if(m.isMesh && m.material && m.userData.origEmissive) {
+      m.material.emissive.copy(m.userData.origEmissive);
+    }
+  });
+  selectedPlacedObject=null;
+  document.getElementById('selection-bar').style.display='none';
+  setHint('👆 Pick an item from the left panel, then click to place it!');
+}
+
+function scaleSelected(factor) {
+  if(!selectedPlacedObject) return;
+  selectedPlacedObject.scale.multiplyScalar(factor);
+  const s=selectedPlacedObject.scale.x;
+  if(s>3.5) selectedPlacedObject.scale.setScalar(3.5);
+  if(s<0.18) selectedPlacedObject.scale.setScalar(0.18);
+}
+
+function rotateSelected(angle) {
+  if(!selectedPlacedObject) return;
+  selectedPlacedObject.rotation.y += angle;
+}
+
+function deleteSelected() {
+  if(!selectedPlacedObject) return;
+  threeScene.remove(selectedPlacedObject);
+  placedObjects=placedObjects.filter(o=>o!==selectedPlacedObject);
+  selectedPlacedObject=null;
+  document.getElementById('selection-bar').style.display='none';
+  setHint('👆 Pick an item from the left panel, then click to place it!');
+  updateStats();
+}
+
 function onWheel(e) {
-  if(!selectedItemId) return;
-  e.preventDefault();
-  placementRotation += e.deltaY * 0.005;
+  if(selectedItemId) {
+    e.preventDefault();
+    placementRotation += e.deltaY * 0.005;
+  } else if(selectedPlacedObject) {
+    e.preventDefault();
+    scaleSelected(e.deltaY > 0 ? 0.93 : 1.07);
+  }
 }
 
 function onKeyDown(e) {
-  if(e.key === 'Escape') { cancelPlacement(); return; }
-  if(!selectedItemId) return;
-  if(e.key === 'ArrowLeft')  { placementRotation -= Math.PI/4; e.preventDefault(); }
-  if(e.key === 'ArrowRight') { placementRotation += Math.PI/4; e.preventDefault(); }
+  if(e.key==='Escape') {
+    if(selectedItemId) cancelPlacement();
+    else deselectPlacedObject();
+    return;
+  }
+  if(selectedItemId) {
+    if(e.key==='ArrowLeft')  { placementRotation -= Math.PI/4; e.preventDefault(); }
+    if(e.key==='ArrowRight') { placementRotation += Math.PI/4; e.preventDefault(); }
+  }
+  if(selectedPlacedObject) {
+    if(e.key==='ArrowLeft')  { rotateSelected(-Math.PI/4); e.preventDefault(); }
+    if(e.key==='ArrowRight') { rotateSelected( Math.PI/4); e.preventDefault(); }
+    if(e.key==='Delete'||e.key==='Backspace') { deleteSelected(); e.preventDefault(); }
+    if(e.code==='Equal'||e.code==='NumpadAdd')      { scaleSelected(1.15); e.preventDefault(); }
+    if(e.code==='Minus'||e.code==='NumpadSubtract') { scaleSelected(0.87); e.preventDefault(); }
+  }
 }
 
 function cancelPlacement() {
@@ -864,6 +1033,7 @@ function cancelPlacement() {
 
 function clearAll() {
   if(!confirm('Clear all placed items? Your coins stay!')) return;
+  deselectPlacedObject();
   placedObjects.forEach(o=>threeScene.remove(o)); placedObjects=[];
   cancelPlacement(); updateStats();
 }
@@ -953,7 +1123,16 @@ let t=0;
 function animate() {
   requestAnimationFrame(animate);
   t+=0.012;
-  if(ghost) ghost.rotation.y = placementRotation + Math.sin(t*2)*0.18; // gentle wobble around chosen angle
+  if(ghost) ghost.rotation.y = placementRotation + Math.sin(t*2)*0.18;
+  // Pulse emissive glow on selected placed item
+  if(selectedPlacedObject) {
+    const pulse = (Math.sin(t*4)+1)*0.5; // 0→1
+    selectedPlacedObject.traverse(m => {
+      if(m.isMesh && m.material && m.material.emissive) {
+        m.material.emissive.setRGB(0.15+pulse*0.2, 0.08+pulse*0.1, 0);
+      }
+    });
+  }
   sceneRefs.extras.forEach(x=>{
     if(x.userData.rotates) x.rotation.y=t*0.04;
     if(x.userData.bobs){ x.position.y=Math.sin(t*0.8)*0.12; }
