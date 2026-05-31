@@ -613,15 +613,31 @@ function initThree() {
   window.addEventListener('resize', onResize);
   // ResizeObserver keeps canvas sized correctly whenever the container changes
   new ResizeObserver(onResize).observe(container);
-  // Attach interaction events directly to the canvas so they fire
-  // before OrbitControls can interfere with bubbling
+
+  // Use pointer events — same type as OrbitControls uses, so no capture interference
   const cvs = renderer.domElement;
-  cvs.addEventListener('mousemove',   onMouseMove);
-  cvs.addEventListener('click',       onClick);
+
+  cvs.addEventListener('pointermove', e => {
+    if(e.isPrimary) onMouseMove(e);
+  });
+
+  cvs.addEventListener('pointerdown', e => {
+    if(!e.isPrimary || e.button !== 0) return;
+    _mouseDownX = e.clientX; _mouseDownY = e.clientY;
+    onMouseDown(e);
+  });
+
+  cvs.addEventListener('pointerup', e => {
+    if(!e.isPrimary || e.button !== 0) return;
+    // Treat as a click if pointer barely moved (< 8px)
+    if(Math.hypot(e.clientX - _mouseDownX, e.clientY - _mouseDownY) < 8) {
+      onClick(e);
+    }
+    onMouseUp(e);
+  });
+
   cvs.addEventListener('contextmenu', e => { e.preventDefault(); if(selectedItemId) cancelPlacement(); });
-  cvs.addEventListener('wheel',       onWheel, { passive: false });
-  cvs.addEventListener('mousedown',   onMouseDown);
-  cvs.addEventListener('mouseup',     onMouseUp);
+  cvs.addEventListener('wheel', onWheel, { passive: false });
   document.addEventListener('keydown', onKeyDown);
 
   animate();
@@ -906,8 +922,6 @@ function onMouseMove(event) {
 
 function onClick(event) {
   if(event.button!==0) return;
-  // Ignore if this was actually a drag (moved > 6px)
-  if(Math.hypot(event.clientX-_mouseDownX, event.clientY-_mouseDownY) > 6) return;
   // ── Not in placement mode: try to select a placed item ──
   if(!selectedItemId) {
     const hit=getHitPlacedObject(event);
